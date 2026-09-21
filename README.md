@@ -2,9 +2,11 @@
 
 An interactive, browser-based calculator for European options pricing under the Black-Scholes-Merton model, with the full set of first- and second-order Greeks updating live as you move the inputs.
 
+By [Eduardo Ramos, CFA](https://github.com/EERamos)
+
 ## Live Demo
 
-<https://eeramos.github.io/bsm-calculator/>
+<https://cfamexico.github.io/bsm-calculator/>
 
 ## What It Does
 
@@ -124,4 +126,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Author
 
-Eduardo Ramos, CFA
+Eduardo Ramos, CFA ([@EERamos](https://github.com/EERamos))
