@@ -77,7 +77,11 @@ Across 9 test scenarios (ATM, deep ITM/OTM, near-expiry, long-dated, high-vol, n
 bsm-calculator/
 ├── index.html          The interactive dashboard (open in any browser)
 ├── bsm_calculator.py   Vectorized Python implementation with full Greeks
+├── hedging_sim.py      Discrete delta-hedging P&L simulator (uses the Greeks above)
+├── tests/              pytest suite for the simulator
+├── docs/design/        Design notes
 ├── requirements.txt    Python dependencies
+├── requirements-dev.txt  Test dependencies
 ├── LICENSE             MIT license
 └── README.md           This file
 ```
@@ -113,6 +117,42 @@ print(f"Gamma: {result.gamma:.4f}")
 ```
 
 All inputs broadcast under NumPy rules, so you can pass arrays for vectorized batch pricing.
+
+### Hedging simulator
+
+`hedging_sim.py` puts the Greeks to work. It trades one option at an implied volatility, delta-hedges it `N` times while the underlying follows GBM with a real volatility of your choice, and returns the P&L distribution.
+
+```bash
+python hedging_sim.py
+```
+
+The demo prints two tables:
+
+* Hedging noise against the number of rebalances, next to the Derman & Kamal (1999) approximation `sqrt(pi/4) · Vega · σ / sqrt(N)`. Hedging four times as often halves the noise.
+* An option sold at 30% implied while the real volatility is 20%, hedged with each of the two volatilities (Ahmad & Wilmott, 2005). Hedging with the real volatility locks in `V(implied) − V(real)` with a noisy mark-to-market path. Hedging with the implied volatility gives a smooth path and a path-dependent total.
+
+```python
+from hedging_sim import delta_hedge_pnl, HedgeVol, Position
+
+res = delta_hedge_pnl(
+    S0=100, K=100, r=0.05, q=0.02, tau=1.0,
+    sigma_implied=0.30, sigma_real=0.20,
+    hedge_vol=HedgeVol.IMPLIED, position=Position.SHORT,
+    n_steps=252, n_paths=5000, seed=7,
+)
+
+print(f"Mean P&L:  {res.mean:.4f}")
+print(f"Stdev P&L: {res.std:.4f}  ({res.std_over_premium:.1%} of premium)")
+```
+
+To run the tests:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Design notes are in [docs/design/hedging-simulator.md](docs/design/hedging-simulator.md).
 
 ## Tech Stack
 
