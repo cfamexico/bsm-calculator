@@ -226,6 +226,10 @@ routed to the degenerate branch and every Greek comes back as zero. A masked
 `tau = 0`. Happy to send a separate small PR with the fix and a regression
 test.
 
+**Update:** fixed in a follow-up PR. Degenerate elements are now masked
+element by element, zero-vol delta follows the sign of the forward (as `bsm()`
+in `index.html` does), and `tests/test_bsm_calculator.py` covers it.
+
 ## 9. File changes
 
 This change:

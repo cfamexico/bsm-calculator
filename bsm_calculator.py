@@ -79,31 +79,26 @@ def _d1_d2(S, K, r, q, sigma, tau):
     return d1, d2, sigma_sqrt_tau
 
 
-def _degenerate_result(S, K, r, q, tau, option):
+def _degenerate_price_delta(S, K, r, q, tau, option):
     """
     Closed-form limits when the BSM formula is undefined.
 
-    * tau -> 0:   price collapses to intrinsic; delta collapses to a Heaviside
-                  step (1 if ITM, 0 if OTM, 0.5 ATM); higher-order Greeks are
-                  either zero or unbounded (we return 0 by convention).
+    * tau <= 0:   price collapses to intrinsic; delta collapses to a Heaviside
+                  step (1 if ITM, 0 if OTM, 0.5 ATM).
     * sigma -> 0: option becomes a deterministic forward, price is the
-                  discounted intrinsic of the forward.
+                  discounted intrinsic of the forward and delta is a step
+                  on the sign of that forward (not on S vs K).
+    Higher-order Greeks are either zero or unbounded (0 by convention).
     """
-    S, K, r, q, tau = (np.asarray(x, dtype=float) for x in (S, K, r, q, tau))
+    tau = np.maximum(tau, 0.0)  # expired: no discounting, like bsm() in JS
     disc_r = np.exp(-r * tau)
     disc_q = np.exp(-q * tau)
-    fwd = S * disc_q - K * disc_r  # discounted intrinsic for sigma=0
+    fwd = S * disc_q - K * disc_r  # equals S - K at tau = 0
+    step = np.where(fwd > 0, 1.0, np.where(fwd < 0, 0.0, 0.5))
 
     if option == "call":
-        price = np.maximum(fwd, 0.0)
-        delta = disc_q * np.where(S > K, 1.0, np.where(S < K, 0.0, 0.5))
-    else:
-        price = np.maximum(-fwd, 0.0)
-        delta = -disc_q * np.where(S < K, 1.0, np.where(S > K, 0.0, 0.5))
-
-    zero = np.zeros_like(price)
-    return BSMResult(price=price, delta=delta, gamma=zero, vega=zero,
-                     theta=zero, rho=zero, vanna=zero, volga=zero, charm=zero)
+        return np.maximum(fwd, 0.0), disc_q * step
+    return np.maximum(-fwd, 0.0), -disc_q * (1.0 - step)
 
 
 def black_scholes(
@@ -123,19 +118,31 @@ def black_scholes(
     - theta per year (divide by 365 for per-day)
     - rho per 1.00 in rate (divide by 100 for per-1% units)
 
-    Degenerate inputs (tau <= 0 or sigma <= 0) are handled with their
-    closed-form limits. S must be strictly positive.
+    Degenerate elements (tau <= 0 or sigma <= 0) get their closed-form
+    limits element by element; the rest of the array is priced normally.
+    S must be strictly positive.
     """
-    S, K, r, q, sigma, tau = map(np.asarray,
-                                  (S, K, r, q, sigma, tau))
+    S, K, r, q, sigma, tau = np.broadcast_arrays(
+        *(np.asarray(x, dtype=float) for x in (S, K, r, q, sigma, tau)))
 
     if np.any(S <= 0) or np.any(K <= 0):
         raise ValueError("S and K must be strictly positive")
     if option not in ("call", "put"):
         raise ValueError("option must be 'call' or 'put'")
 
-    if np.any(np.asarray(tau) <= 0) or np.any(np.asarray(sigma) <= 0):
-        return _degenerate_result(S, K, r, q, tau, option)
+    degenerate = (tau <= 0) | (sigma <= 0)
+    if np.any(degenerate):
+        # Placeholders keep the formula finite where it does not apply;
+        # those elements are overwritten with their limits below.
+        sigma = np.where(degenerate, 1.0, sigma)
+        tau_formula = np.where(degenerate, 1.0, tau)
+        result = black_scholes(S, K, r, q, sigma, tau_formula, option)
+        limit_price, limit_delta = _degenerate_price_delta(
+            S, K, r, q, tau, option)
+        limits = {"price": limit_price, "delta": limit_delta}
+        return BSMResult(**{
+            name: np.where(degenerate, limits.get(name, 0.0), value)[()]
+            for name, value in result.as_dict().items()})
 
     d1, d2, sst = _d1_d2(S, K, r, q, sigma, tau)
     Nd1, Nd2 = norm.cdf(d1), norm.cdf(d2)
