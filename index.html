@@ -1040,6 +1040,16 @@ function readColors(){
 }
 const COLORS = readColors();
 
+/* ---------- Render scheduling ---------- */
+/* Sliders fire 'input' faster than a full render completes, and a preset
+   fires six in a row. Coalesce them: at most one render per animation frame. */
+let renderQueued = false;
+function scheduleRender(){
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); });
+}
+
 /* ---------- Sliders ---------- */
 const sliderDefs = [
   { id:'S',     label:'S',     sub:'Spot',      min:1,    max:300,  step:1,     val:100 },
@@ -1077,7 +1087,7 @@ sliderDefs.forEach(s => {
     state[s.id] = parseFloat(e.target.value);
     lbl.textContent = fmt(e.target.value);
     updFill();
-    render();
+    scheduleRender();
   });
   lbl.textContent = fmt(s.val);
   updFill();
